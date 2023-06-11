@@ -1,0 +1,142 @@
+---
+title: "IXIS Data Science RMD"
+author: "Lauren Migge"
+date: "2023-06-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+#install.packages('openxlsx')
+library(openxlsx)
+library(lubridate)
+library(dplyr)
+```
+## Reading in the Data
+```{r}
+CartAdds <- read.csv("DataAnalyst_Ecom_data_addsToCart.csv")
+
+SessionCounts <- read.csv("DataAnalyst_Ecom_data_sessionCounts.csv")
+```
+
+
+```{r}
+SessionCounts2 <- SessionCounts #Duplicate original data to manipulate
+
+SessionCounts2$dim_date <- mdy(SessionCounts2$dim_date) #change date from character to date variable
+
+SessionCounts2$year_month <- floor_date(SessionCounts2$dim_date,"month") #changing data to reflect monthly changes
+```
+
+```{r}
+first_sheet <- SessionCounts2 %>%                        
+  group_by(year_month, dim_deviceCategory) %>%
+  summarise(sessions=sum(sessions), transactions=sum(transactions), QTY= sum(QTY)) %>%
+  mutate(ECR=transactions/sessions) #adding ECR column
+```
+
+```{r}
+CartAdds2 <- CartAdds #duplicating original data
+
+CartAdds2$Date <- make_date(year = CartAdds2$dim_year, month = CartAdds2$dim_month) #creating date column
+
+CartAdds2 <- CartAdds2 %>%
+  select(Date, addsToCart)
+```
+
+```{r}
+second_sheet <- SessionCounts2 %>%                        
+  group_by(year_month) %>%
+  summarise(sessions=sum(sessions), transactions=sum(transactions), QTY= sum(QTY)) %>%
+  mutate(ECR=transactions/sessions)
+
+
+second_sheet <- second_sheet %>%
+  tail(2) #only past two months
+
+second_sheet$AddsToCart <- c(136720, 107970) #adding Adds to Cart column
+
+second_sheet <- second_sheet %>% 
+  mutate(sess_rel= (sessions - lag(sessions)) / lag(sessions),
+         sess_abs= (sessions-lag(sessions)),
+         tran_rel= (transactions- lag(transactions))/ lag(transactions),
+         tran_abs= (transactions- lag(transactions)), 
+         qty_rel= (QTY-lag(QTY))/lag(QTY),
+         qty_abs= (QTY-lag(QTY)),
+         ecr_rel=(ECR-lag(ECR))/lag(ECR),
+         ecr_abs= (ECR-lag(ECR)),
+         atc_rel=(AddsToCart-lag(AddsToCart))/lag(AddsToCart),
+         atc_abs= (AddsToCart-lag(AddsToCart))) #adding absolute and relative changes for each variable
+
+```
+
+```{r}
+ggplot(data = first_sheet, aes(x = year_month, y = sessions, color = dim_deviceCategory)) +
+    geom_line(size= 1.25)+
+  labs(title = "Number of Sessions by Device",
+         x = "Month",
+         y = "Sessions") +
+  guides(color = guide_legend(title = "Device"))+
+  theme_bw() # plotting sessions by device over time
+```
+```{r}
+ggplot(data = first_sheet, aes(x = year_month, y = transactions, color = dim_deviceCategory)) +
+    geom_line(size= 1.25)+
+  labs(title = "Number of Transactions by Device",
+         x = "Month",
+         y = "Transactions") +
+  guides(color = guide_legend(title = "Device"))+
+  theme_bw()  # plotting transactions by device over time
+```
+```{r}
+ggplot(data = first_sheet, aes(x = year_month, y = ECR, color = dim_deviceCategory)) +
+    geom_line(size= 1.25)+
+  labs(title = "Difference between Sessions and Transactions by Device",
+         x = "Month",
+         y = "ECR") +
+  guides(color = guide_legend(title = "Device"))+
+  theme_bw() # plotting ECR by device over time
+```
+```{r}
+ggplot(second_sheet, aes(x=year_month, y=ECR)) + 
+  geom_col(width = 15)+
+  labs(title = "Difference between ECR Last 2 Months",
+         x = "Month",
+         y = "ECR")# ECR changes between past two months
+```
+```{r}
+ggplot(second_sheet, aes(x=year_month, y=transactions)) + 
+  geom_col(width = 15) +
+  labs(title = "Difference between Transactions Last 2 Months",
+         x = "Month",
+         y = "Transactions")# transactions changes between last two months
+```
+```{r}
+ggplot(second_sheet, aes(x=year_month, y=AddsToCart)) + 
+  geom_col(width = 15)+
+  labs(title = "Difference between Adds to Cart Last 2 Months ",
+         x = "Month",
+         y = "Adds to Cart")# Adds to Cart changes between last two months
+```
+
+```{r}
+ggplot(second_sheet, aes(x=year_month, y=sessions)) + 
+  geom_col(width = 15) +
+  labs(title = "Difference Sessions Last 2 Months",
+         x = "Month",
+         y = "Sessions")# sessions changes between last two months
+```
+
+```{r}
+dataset_names <- list('Sheet1' = first_sheet, 'Sheet2' = second_sheet)
+write.xlsx(dataset_names, file = 'DataChallengeIXIS.xlsx') # exporting as xlsx file
+```
+
+
+
+
+
